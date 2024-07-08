@@ -196,7 +196,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("pickTwo", (data) => {
-    const { roomCode, username, card } = data;
+    
   });
 
   socket.on("useMarket", (data) => {
