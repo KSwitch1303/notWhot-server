@@ -24,11 +24,6 @@ const io = new Server(server, {
 
 // Object to store room-specific data
 const rooms = {};
-const roomCodes = {
-  100: {},
-  200: {},
-  500: {},
-};
 
 io.on("connection", (socket) => {
   console.log(`User Connected: ${socket.id}`);
@@ -56,64 +51,37 @@ io.on("connection", (socket) => {
   });
 
   socket.on("joinRoom", (data) => {
-    const { username, lobbyName } = data;
-    let len = Object.keys(roomCodes[lobbyName]).length - 1;
-    let roomCode = '';
-    console.log(roomCodes[lobbyName]);
-    if (roomCodes[lobbyName][len]) {
-      console.log('not empty');
-      console.log(roomCodes[lobbyName][len].players);
-      if (roomCodes[lobbyName][len].players === 1) {
-        socket.join(roomCodes[lobbyName][len].roomCode);
-        roomCodes[lobbyName][len].players++;
-        console.log('joined room');
-        roomCode = roomCodes[lobbyName][len].roomCode;
-        rooms[roomCode].players[username] = {
-          username: username,
-          cards: [],
-          wager: 100,
-          turn: false,
-          status: "waiting",
-        };
-        console.log(roomCodes[lobbyName]);
-        console.log(rooms[roomCode]);
-      } else {
-        console.log('creating new room');
-        roomCode = socket.id + '-' + Math.floor(Math.random() * 1000000000);
-        roomCodes[lobbyName][len + 1] = {
-          roomCode: roomCode,
-          players: 1,
-        };
-        console.log('Created another room');
-        InitializeRoom(roomCode, username);
-        console.log(roomCodes[lobbyName]);
-        socket.join(roomCode);
-      }
-    } else {
-      console.log('empty');
-      // generate room code
-      roomCode = socket.id + '-' + Math.floor(Math.random() * 1000000000);
-      roomCodes[lobbyName][0] = {
-        roomCode: roomCode,
-        players: 1,
-      };
-      InitializeRoom(roomCode, username);
-      console.log('Created room');
-      console.log(roomCodes[lobbyName]);
-      socket.join(roomCode);
+    const { roomCode, username } = data;
+
+    // Check if the room exists
+    if (!rooms[roomCode]) {
+      rooms[roomCode] = { players: {}, market: [], playedCards: [], currentPlayerIndex: 0 };
     }
-    
-    // let roomCode = roomCodes[lobbyName][len].roomCode;
-    io.to(socket.id).emit("roomCode", { roomCode: roomCode });
 
-   
+    // Check if the room already has 3 players
+    if (Object.keys(rooms[roomCode].players).length >= 3) {
+      socket.emit("roomFull", { message: "Room is full. Cannot join." });
+      return;
+    }else {
+      socket.emit("roomNotFull", { message: "Room is not full. Joining." });
+    }
 
-    // // Add the new player to the room
+    socket.join(roomCode);
+    console.log(`User with ID: ${socket.id} and name ${username} joined room: ${roomCode}`);
 
-    // // Notify existing users in the room about the new player
+    // Add the new player to the room
+    rooms[roomCode].players[username] = {
+      username: username,
+      cards: [],
+      wager: 100,
+      turn: false,
+      status: "waiting",
+    };
+
+    // Notify existing users in the room about the new player
     socket.to(roomCode).emit("userJoined", { username, userID: socket.id });
 
-    // // Send the updated player list to all users in the room
+    // Send the updated player list to all users in the room
     io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
   });
 
@@ -218,22 +186,6 @@ io.on("connection", (socket) => {
   });
 });
 
-const InitializeRoom = (roomCode, username) => {
-  rooms[roomCode] = {
-    players: {
-      [username]: {
-        username: username,
-        cards: [],
-        wager: 100,
-        turn: true,
-        status: "waiting",
-      },
-    },
-    market: [],
-    playedCards: [],
-    currentPlayerIndex: 0,
-  };
-}
 const generateMarket = () => {
   const market = [];
   const cardNamesandValues = {
