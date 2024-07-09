@@ -12,7 +12,8 @@ app.use(cors());
 app.use(express.json());
 
 const User = require('./models/userSchema')
-const Transaction = require('./models/transactionSchema')
+const Transaction = require('./models/transactionSchema');
+const { time } = require('console');
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -29,6 +30,7 @@ const roomCodes = {
   200: {},
   500: {},
 };
+
 
 io.on("connection", (socket) => {
   console.log(`User Connected: ${socket.id}`);
@@ -49,6 +51,7 @@ io.on("connection", (socket) => {
           status: "waiting",
         },
       },
+      timer: 0,
       market: [],
       playedCards: [],
       currentPlayerIndex: 0,
@@ -153,9 +156,13 @@ io.on("connection", (socket) => {
 
   socket.on("ready", (data) => {
     const { roomCode, username } = data;
+    if (Object.keys(rooms[roomCode].players).length === 1) {
+      return;
+    }
     rooms[roomCode].players[username].status = "ready";
     io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players });
-
+    // check if room is more than 1 player
+    
     // Check if all players are ready
     const readyPlayers = Object.values(rooms[roomCode].players).filter((player) => player.status === "ready");
     if (readyPlayers.length === Object.keys(rooms[roomCode].players).length) {
@@ -376,7 +383,17 @@ app.post("/addTransaction", async (req, res) => {
 })
 
 app.get("/getTransactions", async (req, res) => {
-  const transactions = await Transaction.find({});
+  const unsorted_transactions = await Transaction.find({});
+  // sort by the latest
+  const transactions = unsorted_transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+  res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+})
+
+app.get("/getTransactions/:username", async (req, res) => {
+  const { username } = req.params;
+  const unsorted_transactions = await Transaction.find({ sender: username });
+  // sort by the latest
+  const transactions = unsorted_transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
 })
 
