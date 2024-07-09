@@ -375,6 +375,66 @@ app.post("/addTransaction", async (req, res) => {
   }
 })
 
+app.get("/getTransactions", async (req, res) => {
+  const transactions = await Transaction.find({});
+  res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+})
+
+app.post("/updateTransaction", async (req, res) => {
+  const { transactionId, status } = req.body;
+  const transaction = await Transaction.findById(transactionId);
+  transaction.status = status;
+  try {
+    await transaction.save();
+    res.status(200).json({ message: "Transaction approved successfully", success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error approving transaction" });
+  }
+})
+
+app.get("/paystackInit", async (req, res) => {
+  // const { amount, email } = req.body;
+  amount = 1000 * 100
+  email = "XtTq0@example.com"
+  const https = require('https')
+
+  const params = JSON.stringify({
+    "email": email,
+    "amount": amount
+  })
+
+  const options = {
+    hostname: 'api.paystack.co',
+    port: 443,
+    path: '/transaction/initialize',
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+      'Content-Type': 'application/json'
+    }
+  }
+
+  const reqPaystack = https.request(options, resPaystack => {
+    let data = ''
+
+    resPaystack.on('data', (chunk) => {
+      data += chunk
+    });
+
+    resPaystack.on('end', () => {
+      res.send(JSON.parse(data).data)
+      console.log(JSON.parse(data))
+    })
+  }).on('error', error => {
+    console.error(error)
+  })
+
+  reqPaystack.write(params)
+  reqPaystack.end()
+})
+
+
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     server.listen(port, () => {
