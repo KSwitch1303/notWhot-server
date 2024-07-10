@@ -14,6 +14,7 @@ app.use(express.json());
 const User = require('./models/userSchema')
 const Transaction = require('./models/transactionSchema');
 const { time } = require('console');
+const { listeners } = require('process');
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -306,7 +307,15 @@ io.on("connection", (socket) => {
       console.log(error);
     }
   });
-
+  socket.on("updateTimer", (data) => {
+    try {
+      const { roomCode } = dat
+      console.log('tick',);
+      timerTick(roomCode);
+    } catch (error) {
+      console.log(error);
+    }
+  })
   socket.on("endGame", async (data) => {
     try {
       const { roomCode, username, winStatus, amount, wager } = data;
@@ -340,11 +349,25 @@ const InitializeRoom = (roomCode, username, lobbyName) => {
         status: "waiting",
       },
     },
+    timer: 120,
     market: [],
     playedCards: [],
     currentPlayerIndex: 0,
   };
 }
+const timerTick = (roomCode) => {
+  rooms[roomCode].timer--;
+  io.in(roomCode).emit("timerTick", { timer: rooms[roomCode].timer });
+}
+
+// setInterval(() => {
+//   for (const roomCode in rooms) {
+//     if (rooms[roomCode].timer > 0) {
+//       timerTick(roomCode);
+//     }
+//   }
+// }, 1000);
+
 const refillMarket = (roomCode) => {
   if (rooms[roomCode].market.length === 1) {
     //take the played cards and refill the market but leave the last card
@@ -601,7 +624,9 @@ app.get("/getTransactions", async (req, res) => {
 
 app.get("/getTransactions/:username", async (req, res) => {
   const { username } = req.params;
-  const unsorted_transactions = await Transaction.find({ sender: username });
+  let unsorted_transactions = await Transaction.find({ sender: username });
+  console.log(typeof(unsorted_transactions))
+  // unsorted_transactions = unsorted_transactions.concat(await Transaction.find({ receiver: username }));
   // sort by the latest
   const transactions = unsorted_transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
@@ -619,6 +644,8 @@ app.post("/updateTransaction", async (req, res) => {
     res.status(201).json({ message: "Error approving transaction" });
   }
 })
+
+
 
 app.get("/paystackInit", async (req, res) => {
   // const { amount, email } = req.body;
