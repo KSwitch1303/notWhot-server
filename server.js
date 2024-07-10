@@ -198,7 +198,13 @@ io.on("connection", (socket) => {
       // Move to the next player's turn
       await passTurn(roomCode);
       refillMarket(roomCode);
-
+      for (const player in rooms[roomCode].players) {
+        const playerObj = rooms[roomCode].players[player];
+        console.log(playerObj);
+        if (playerObj.cards.length === 0) {
+          gameWon(roomCode, player);
+        }
+      }
       if (need) {
         console.log(need);
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
@@ -250,6 +256,7 @@ io.on("connection", (socket) => {
       // Move to the next player's turn
       passTurn(roomCode);
       refillMarket(roomCode);
+      
       if (need) {
         console.log(need);
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
@@ -294,6 +301,10 @@ const refillMarket = (roomCode) => {
     console.log(rooms[roomCode]);
     // console.log(rooms[roomCode].market);
   }
+}
+
+const gameWon = (roomCode, winner) => {
+  io.in(roomCode).emit("gameWon", { winner: winner });
 }
 const generateMarket = () => {
   const market = [];
