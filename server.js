@@ -7,7 +7,7 @@ const port = 5003;
 const mongoose = require('mongoose')
 const cors = require('cors');
 const bcrypt = require('bcrypt');
-
+const axios = require('axios');
 app.use(cors());
 app.use(express.json());
 
@@ -59,224 +59,268 @@ io.on("connection", (socket) => {
   });
 
   socket.on("joinRoom", (data) => {
-    const { username, lobbyName } = data;
-    let len = Object.keys(roomCodes[lobbyName]).length - 1;
-    let roomCode = '';
-    console.log(roomCodes[lobbyName]);
-    if (roomCodes[lobbyName][len]) {
-      console.log('not empty');
-      console.log(roomCodes[lobbyName][len].players);
-      if (roomCodes[lobbyName][len].players === 1) {
-        socket.join(roomCodes[lobbyName][len].roomCode);
-        roomCodes[lobbyName][len].players++;
-        console.log('joined room');
-        roomCode = roomCodes[lobbyName][len].roomCode;
-        rooms[roomCode].players[username] = {
-          username: username,
-          cards: [],
-          wager: Number(lobbyName),
-          turn: false,
-          status: "waiting",
-        };
-        console.log(roomCodes[lobbyName]);
-        console.log(rooms[roomCode]);
+    try {
+      const { username, lobbyName } = data;
+      let len = Object.keys(roomCodes[lobbyName]).length - 1;
+      let roomCode = '';
+      console.log(roomCodes[lobbyName]);
+      if (roomCodes[lobbyName][len]) {
+        console.log('not empty');
+        console.log(roomCodes[lobbyName][len].players);
+        if (roomCodes[lobbyName][len].players === 1) {
+          socket.join(roomCodes[lobbyName][len].roomCode);
+          roomCodes[lobbyName][len].players++;
+          console.log('joined room');
+          roomCode = roomCodes[lobbyName][len].roomCode;
+          rooms[roomCode].players[username] = {
+            username: username,
+            cards: [],
+            wager: Number(lobbyName),
+            turn: false,
+            status: "waiting",
+          };
+          console.log(roomCodes[lobbyName]);
+          console.log(rooms[roomCode]);
+        } else {
+          console.log('creating new room');
+          roomCode = socket.id + '-' + Math.floor(Math.random() * 1000000000);
+          roomCodes[lobbyName][len + 1] = {
+            roomCode: roomCode,
+            players: 1,
+          };
+          console.log('Created another room');
+          InitializeRoom(roomCode, username, lobbyName);
+          console.log(roomCodes[lobbyName]);
+          socket.join(roomCode);
+        }
       } else {
-        console.log('creating new room');
+        console.log('empty');
+        // generate room code
         roomCode = socket.id + '-' + Math.floor(Math.random() * 1000000000);
-        roomCodes[lobbyName][len + 1] = {
+        roomCodes[lobbyName][0] = {
           roomCode: roomCode,
           players: 1,
         };
-        console.log('Created another room');
         InitializeRoom(roomCode, username, lobbyName);
+        console.log('Created room');
         console.log(roomCodes[lobbyName]);
         socket.join(roomCode);
       }
-    } else {
-      console.log('empty');
-      // generate room code
-      roomCode = socket.id + '-' + Math.floor(Math.random() * 1000000000);
-      roomCodes[lobbyName][0] = {
-        roomCode: roomCode,
-        players: 1,
-      };
-      InitializeRoom(roomCode, username, lobbyName);
-      console.log('Created room');
-      console.log(roomCodes[lobbyName]);
-      socket.join(roomCode);
-    }
+      
+      // let roomCode = roomCodes[lobbyName][len].roomCode;
+      io.to(socket.id).emit("roomCode", { roomCode: roomCode });
+
     
-    // let roomCode = roomCodes[lobbyName][len].roomCode;
-    io.to(socket.id).emit("roomCode", { roomCode: roomCode });
 
-   
+      // // Add the new player to the room
 
-    // // Add the new player to the room
+      // // Notify existing users in the room about the new player
+      socket.to(roomCode).emit("userJoined", { username, userID: socket.id });
 
-    // // Notify existing users in the room about the new player
-    socket.to(roomCode).emit("userJoined", { username, userID: socket.id });
-
-    // // Send the updated player list to all users in the room
-    io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+      // // Send the updated player list to all users in the room
+      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+    } catch (error) {
+      console.log(error);
+    }
   });
 
   socket.on("leaveRoom", (data) => {
-    const { roomCode, username } = data;
-    socket.leave(roomCode);
-    console.log(`User with ID: ${socket.id} and name ${username} left room: ${roomCode}`);
+    try {
+      const { roomCode, username } = data;
+      socket.leave(roomCode);
+      console.log(`User with ID: ${socket.id} and name ${username} left room: ${roomCode}`);
 
-    // Remove the player from the room
-    if (rooms[roomCode]) {
-      delete rooms[roomCode].players[username];
-      // If the room is empty, you can optionally delete it
-      if (Object.keys(rooms[roomCode].players).length === 0) {
-        delete rooms[roomCode];
-      } else {
-        // Notify remaining users in the room about the player leaving
-        socket.to(roomCode).emit("userLeft", { username, userID: socket.id });
+      // Remove the player from the room
+      if (rooms[roomCode]) {
+        delete rooms[roomCode].players[username];
+        // If the room is empty, you can optionally delete it
+        if (Object.keys(rooms[roomCode].players).length === 0) {
+          delete rooms[roomCode];
+        } else {
+          // Notify remaining users in the room about the player leaving
+          socket.to(roomCode).emit("userLeft", { username, userID: socket.id });
 
-        // Send the updated player list to all users in the room
-        io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players });
+          // Send the updated player list to all users in the room
+          io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players });
+        }
       }
+    } catch (error) {
+      console.log(error);
     }
   });
 
   socket.on("updatePlayers", (data) => {
-    const { roomCode, players } = data;
-    rooms[roomCode].players = players;
-    io.in(roomCode).emit("playersUpdated", { players });
+    try {
+      const { roomCode, players } = data;
+      rooms[roomCode].players = players;
+      io.in(roomCode).emit("playersUpdated", { players });
+    } catch (error) {
+      console.log(error);
+    }
   });
 
   socket.on("updatePlayedCards", (data) => {
-    const { roomCode } = data;
-    playedCards = rooms[roomCode].playedCards;
-    console.log(playedCards);
-    io.in(roomCode).emit("playersUpdated", { playedCards, normalCardPlayed: true });
+    try {
+      const { roomCode } = data;
+      playedCards = rooms[roomCode].playedCards;
+      console.log(playedCards);
+      io.in(roomCode).emit("playersUpdated", { playedCards, normalCardPlayed: true });
+    } catch (error) {
+      console.log(error);
+    }
   });
 
   socket.on("ready", (data) => {
-    const { roomCode, username } = data;
-    if (Object.keys(rooms[roomCode].players).length === 1) {
-      return;
-    }
-    rooms[roomCode].players[username].status = "ready";
-    io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players });
-    // check if room is more than 1 player
-    
-    // Check if all players are ready
-    const readyPlayers = Object.values(rooms[roomCode].players).filter((player) => player.status === "ready");
-    if (readyPlayers.length === Object.keys(rooms[roomCode].players).length) {
-      console.log(`Starting game in room: ${roomCode}`);
-      // Generate Cards
-      const market = generateMarket();
-      rooms[roomCode].market = market;
+    try {
+      const { roomCode, username } = data;
+      if (Object.keys(rooms[roomCode].players).length === 1) {
+        return;
+      }
+      rooms[roomCode].players[username].status = "ready";
+      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players });
+      // check if room is more than 1 player
+      
+      // Check if all players are ready
+      const readyPlayers = Object.values(rooms[roomCode].players).filter((player) => player.status === "ready");
+      if (readyPlayers.length === Object.keys(rooms[roomCode].players).length) {
+        console.log(`Starting game in room: ${roomCode}`);
+        // Generate Cards
+        const market = generateMarket();
+        rooms[roomCode].market = market;
 
-      // Distribute cards to players
-      distributeCards(roomCode);
+        // Distribute cards to players
+        distributeCards(roomCode);
 
-      // Determine the first player to start the game
-      const playerKeys = Object.keys(rooms[roomCode].players);
-      rooms[roomCode].currentPlayerIndex = 0;
-      rooms[roomCode].players[playerKeys[rooms[roomCode].currentPlayerIndex]].turn = true;
+        // Determine the first player to start the game
+        const playerKeys = Object.keys(rooms[roomCode].players);
+        rooms[roomCode].currentPlayerIndex = 0;
+        rooms[roomCode].players[playerKeys[rooms[roomCode].currentPlayerIndex]].turn = true;
 
-      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+        io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
 
-      // Emit the startGame event to the room with the updated player data
-      io.in(roomCode).emit("startGame", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: true });
-      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+        // Emit the startGame event to the room with the updated player data
+        io.in(roomCode).emit("startGame", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: true });
+        io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+      }
+    } catch (error) {
+      console.log(error);
     }
   });
 
   socket.on("playCard", async (data) => {
-    const { roomCode, username, card, need } = data;
+    try {
+      const { roomCode, username, card, need } = data;
 
-    if (rooms[roomCode].players[username].turn) {
-      // Remove the played card from the player's hand
-      rooms[roomCode].players[username].cards = rooms[roomCode].players[username].cards.filter((c) => c !== card);
-      rooms[roomCode].playedCards.push(card);
+      if (rooms[roomCode].players[username].turn) {
+        // Remove the played card from the player's hand
+        rooms[roomCode].players[username].cards = rooms[roomCode].players[username].cards.filter((c) => c !== card);
+        rooms[roomCode].playedCards.push(card);
 
-      // Move to the next player's turn
-      await passTurn(roomCode);
-      refillMarket(roomCode);
-      for (const player in rooms[roomCode].players) {
-        const playerObj = rooms[roomCode].players[player];
-        console.log(playerObj);
-        if (playerObj.cards.length === 0) {
-          gameWon(roomCode, player);
+        // Move to the next player's turn
+        await passTurn(roomCode);
+        refillMarket(roomCode);
+        for (const player in rooms[roomCode].players) {
+          const playerObj = rooms[roomCode].players[player];
+          console.log(playerObj);
+          if (playerObj.cards.length === 0) {
+            gameWon(roomCode, player);
+          }
         }
-      }
-      if (need) {
-        console.log(need);
-        io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
-        return;
-      }
+        if (need) {
+          console.log(need);
+          io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
+          return;
+        }
 
-      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: true});
+        io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: true});
+      }
+    } catch (error) {
+      console.log(error);
     }
   });
 
   socket.on("pickTwo", async (data) => {
-    const { roomCode, username } = data;
-    if (rooms[roomCode].players[username].turn) {
-      rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
-      rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
-      await passTurn(roomCode);
-      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
+    try {
+      const { roomCode, username } = data;
+      if (rooms[roomCode].players[username].turn) {
+        rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
+        rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
+        await passTurn(roomCode);
+        io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
+      }
+    } catch (error) {
+      console.log(error);
     }
   });
 
   socket.on("holdOn", async (data) => {
-    const { roomCode, username } = data;
+    try {
+      const { roomCode, username } = data;
 
-    if (rooms[roomCode].players[username].turn) {
-      await passTurn(roomCode);
+      if (rooms[roomCode].players[username].turn) {
+        await passTurn(roomCode);
 
-      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
+        io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
+      }
+    } catch (error) {
+      console.log(error);
     }
       
   })
 
   socket.on("generalMarket", async (data) => {
-    const { roomCode, username } = data;
+    try {
+      const { roomCode, username } = data;
 
-    if (rooms[roomCode].players[username].turn) {
-      rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
-      await passTurn(roomCode);
+      if (rooms[roomCode].players[username].turn) {
+        rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
+        await passTurn(roomCode);
 
-      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
+        io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
+      }
+    } catch (error) {
+      console.log(error);
     }
   })
 
   socket.on("useMarket", (data) => {
-    const { roomCode, username, need } = data;
+    try {
+      const { roomCode, username, need } = data;
 
-    if (rooms[roomCode].players[username].turn) {
-      rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
+      if (rooms[roomCode].players[username].turn) {
+        rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
 
-      // Move to the next player's turn
-      passTurn(roomCode);
-      refillMarket(roomCode);
-      
-      if (need) {
-        console.log(need);
-        io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
-        return;
+        // Move to the next player's turn
+        passTurn(roomCode);
+        refillMarket(roomCode);
+        
+        if (need) {
+          console.log(need);
+          io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
+          return;
+        }
+
+        io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
       }
-
-      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+    } catch (error) {
+      console.log(error);
     }
   });
 
   socket.on("endGame", async (data) => {
-    const { roomCode, username, winStatus, amount } = data;
+    try {
+      const { roomCode, username, winStatus, amount, wager } = data;
 
-    if (winStatus === "win") {
-      await increaseBalance(roomCode, username, amount);
-    } else if (winStatus === "loss") {
-      await decreaseBalance(roomCode, username, amount);
+      if (winStatus === "win") {
+        await increaseBalance(roomCode, username, amount, wager);
+      } else if (winStatus === "loss") {
+        // await decreaseBalance(roomCode, username, amount);
+      }
+
+      io.to(socket.id).emit("disconnectPlayer", { });
+    } catch (error) {
+      console.log(error);
     }
-
-    io.to(socket.id).emit("disconnectPlayer", { });
   });
 
   socket.on("disconnect", () => {
@@ -357,6 +401,12 @@ const distributeCards = (roomCode) => {
 
   // Add one card to the playedCards array
   rooms[roomCode].playedCards.push(market.shift());
+  if (rooms[roomCode].playedCards[0].split("-")[0] === "w") {
+    rooms[roomCode].playedCards.push(market.shift());
+    if (rooms[roomCode].playedCards[1].split("-")[1] === "w") {
+      rooms[roomCode].playedCards.push(market.shift());
+    }
+  }
 
   // Update the room market with the remaining cards
   rooms[roomCode].market = market;
@@ -472,13 +522,20 @@ app.post("/addTransaction", async (req, res) => {
   }
 })
 
-const increaseBalance = async (roomCode, username, amount) => {
+const increaseBalance = async (roomCode, username, amount, wager) => {
   console.log('increasing amount')
   const user = await User.findOne({ username });
   console.log(user)
-  user.balance += amount;
+  balUpdate = (amount + wager);
+  user.balance += balUpdate;
   try {
     await user.save();
+    await axios.post(`${process.env.API_URL}/addTransaction`, {
+      sender: "game win",
+      amount: balUpdate,
+      receiver: username,
+      tno: Math.floor(Math.random() * 1000000000)
+    })    
   } catch (error) {
     console.error(error);
   }
@@ -492,10 +549,48 @@ const decreaseBalance = async (roomCode, username, amount) => {
   user.balance -= amount;
   try {
     await user.save();
+    await axios.post(`${process.env.API_URL}/addTransaction`, {
+      sender: "game loss",
+      amount: `-${amount}`,
+      receiver: username,
+      tno: Math.floor(Math.random() * 1000000000)
+    })
   } catch (error) {
     console.error(error);
   }
 };
+
+const placeBet = async (roomCode, username, amount) => {
+  const user = await User.findOne({ username });
+  console.log(user)
+  console.log(`balance is ${user.balance}`)
+  console.log(amount, typeof(amount))
+  user.balance -= Number(amount);
+  try {
+    await user.save();
+    await axios.post(`${process.env.API_URL}/addTransaction`, {
+      sender: "bet placed",
+      amount: `-${amount}`,
+      receiver: username,
+      tno: Math.floor(Math.random() * 1000000000)
+    })
+    return 'Bet placed successfully'
+  } catch (error) {
+    console.error(error);
+    return 'Error placing bet'
+  }
+};
+
+app.post("/placeBet", async (req, res) => {
+  try {
+    const { roomCode, username, amount } = req.body;
+    const message = await placeBet(roomCode, username, amount);
+    res.status(200).json({ message, success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error placing bet", success: false });
+  }
+})
 
 app.get("/getTransactions", async (req, res) => {
   const unsorted_transactions = await Transaction.find({});
