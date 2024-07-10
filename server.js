@@ -151,7 +151,7 @@ io.on("connection", (socket) => {
     const { roomCode } = data;
     playedCards = rooms[roomCode].playedCards;
     console.log(playedCards);
-    io.in(roomCode).emit("playersUpdated", { playedCards });
+    io.in(roomCode).emit("playersUpdated", { playedCards, normalCardPlayed: true });
   });
 
   socket.on("ready", (data) => {
@@ -182,7 +182,7 @@ io.on("connection", (socket) => {
       io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
 
       // Emit the startGame event to the room with the updated player data
-      io.in(roomCode).emit("startGame", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+      io.in(roomCode).emit("startGame", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: true });
       io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
     }
   });
@@ -198,13 +198,41 @@ io.on("connection", (socket) => {
       // Move to the next player's turn
       await passTurn(roomCode);
 
-      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market });
+      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: true});
     }
   });
 
-  socket.on("pickTwo", (data) => {
-    
+  socket.on("pickTwo", async (data) => {
+    const { roomCode, username } = data;
+    if (rooms[roomCode].players[username].turn) {
+      rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
+      rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
+      await passTurn(roomCode);
+      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
+    }
   });
+
+  socket.on("holdOn", async (data) => {
+    const { roomCode, username } = data;
+
+    if (rooms[roomCode].players[username].turn) {
+      await passTurn(roomCode);
+
+      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
+    }
+      
+  })
+
+  socket.on("generalMarket", async (data) => {
+    const { roomCode, username } = data;
+
+    if (rooms[roomCode].players[username].turn) {
+      rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
+      await passTurn(roomCode);
+
+      io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
+    }
+  })
 
   socket.on("useMarket", (data) => {
     const { roomCode, username } = data;
