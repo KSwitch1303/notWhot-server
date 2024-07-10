@@ -197,6 +197,7 @@ io.on("connection", (socket) => {
 
       // Move to the next player's turn
       await passTurn(roomCode);
+      refillMarket(roomCode);
 
       if (need) {
         console.log(need);
@@ -248,7 +249,7 @@ io.on("connection", (socket) => {
 
       // Move to the next player's turn
       passTurn(roomCode);
-
+      refillMarket(roomCode);
       if (need) {
         console.log(need);
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
@@ -281,6 +282,19 @@ const InitializeRoom = (roomCode, username) => {
     currentPlayerIndex: 0,
   };
 }
+const refillMarket = (roomCode) => {
+  if (rooms[roomCode].market.length === 1) {
+    //take the played cards and refill the market but leave the last card
+    for (let i = 0; i < rooms[roomCode].playedCards.length - 1; i++) {
+      rooms[roomCode].market.push(rooms[roomCode].playedCards[i]);
+    }
+    rooms[roomCode].playedCards = [rooms[roomCode].playedCards[rooms[roomCode].playedCards.length - 1]];
+    //shuffle the market
+    rooms[roomCode].market = rooms[roomCode].market.sort(() => Math.random() - 0.5);
+    console.log(rooms[roomCode]);
+    // console.log(rooms[roomCode].market);
+  }
+}
 const generateMarket = () => {
   const market = [];
   const cardNamesandValues = {
@@ -289,7 +303,7 @@ const generateMarket = () => {
     "x": [14, 10, 5, 7, 11, 3, 2, 1, 13],
     "s": [3, 14, 5, 10, 7, 1, 2, 13, 11],
     "r": [5, 4, 1, 7, 3, 8, 2],
-    "w": [20, 20, 20, 20, 20]
+    "w": [20, 21, 22, 23, 24]
   };
 
   // Combine all cards into a single array
