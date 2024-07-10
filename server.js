@@ -74,7 +74,7 @@ io.on("connection", (socket) => {
         rooms[roomCode].players[username] = {
           username: username,
           cards: [],
-          wager: 100,
+          wager: Number(lobbyName),
           turn: false,
           status: "waiting",
         };
@@ -88,7 +88,7 @@ io.on("connection", (socket) => {
           players: 1,
         };
         console.log('Created another room');
-        InitializeRoom(roomCode, username);
+        InitializeRoom(roomCode, username, lobbyName);
         console.log(roomCodes[lobbyName]);
         socket.join(roomCode);
       }
@@ -100,7 +100,7 @@ io.on("connection", (socket) => {
         roomCode: roomCode,
         players: 1,
       };
-      InitializeRoom(roomCode, username);
+      InitializeRoom(roomCode, username, lobbyName);
       console.log('Created room');
       console.log(roomCodes[lobbyName]);
       socket.join(roomCode);
@@ -267,19 +267,31 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("endGame", async (data) => {
+    const { roomCode, username, winStatus, amount } = data;
+
+    if (winStatus === "win") {
+      await increaseBalance(roomCode, username, amount);
+    } else if (winStatus === "loss") {
+      await decreaseBalance(roomCode, username, amount);
+    }
+
+    io.to(socket.id).emit("disconnectPlayer", { });
+  });
+
   socket.on("disconnect", () => {
     console.log(`User Disconnected: ${socket.id}`);
     // Logic to handle player disconnection (if needed)
   });
 });
 
-const InitializeRoom = (roomCode, username) => {
+const InitializeRoom = (roomCode, username, lobbyName) => {
   rooms[roomCode] = {
     players: {
       [username]: {
         username: username,
         cards: [],
-        wager: 100,
+        wager: Number(lobbyName),
         turn: true,
         status: "waiting",
       },
@@ -304,7 +316,8 @@ const refillMarket = (roomCode) => {
 }
 
 const gameWon = (roomCode, winner) => {
-  io.in(roomCode).emit("gameWon", { winner: winner });
+  rooms[roomCode].players[winner].status = "wins";
+  io.in(roomCode).emit("gameWon", { winner: winner, players: rooms[roomCode].players });
 }
 const generateMarket = () => {
   const market = [];
@@ -414,6 +427,18 @@ app.post("/login", async (req, res) => {
   res.status(200).json({ message: "Login successful", success: true, user });
 })
 
+app.get("/users/:username", async (req, res) => {
+  const { username } = req.params;
+  const user = await User.findOne({ username });
+  if (!user) {
+    res.status(201).json({ message: "User does not exist" });
+    return;
+  }
+  res.status(200).json({ user });
+});
+
+
+
 app.post("/update", async (req, res) => {
   const { username, bank, accountNo, accountName } = req.body;
   const user = await User.findOne({ username });
@@ -446,6 +471,31 @@ app.post("/addTransaction", async (req, res) => {
     res.status(201).json({ message: "Error adding transaction" });
   }
 })
+
+const increaseBalance = async (roomCode, username, amount) => {
+  console.log('increasing amount')
+  const user = await User.findOne({ username });
+  console.log(user)
+  user.balance += amount;
+  try {
+    await user.save();
+  } catch (error) {
+    console.error(error);
+  }
+
+};
+
+const decreaseBalance = async (roomCode, username, amount) => {
+  console.log('dereasing amount', username, amount)
+  const user = await User.findOne({ username });
+  console.log(user)
+  user.balance -= amount;
+  try {
+    await user.save();
+  } catch (error) {
+    console.error(error);
+  }
+};
 
 app.get("/getTransactions", async (req, res) => {
   const unsorted_transactions = await Transaction.find({});
