@@ -273,6 +273,7 @@ io.on("connection", (socket) => {
   socket.on("pickTwo", async (data) => {
     try {
       const { roomCode, username } = data;
+      console.log(rooms);
       if (rooms[roomCode].players[username].turn) {
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
@@ -352,8 +353,11 @@ io.on("connection", (socket) => {
 
       if (winStatus === "win") {
         await increaseBalance(roomCode, username, amount, wager);
+        // remove player
+        delete players[username];
       } else if (winStatus === "loss") {
         // await decreaseBalance(roomCode, username, amount);
+        delete players[username];
       }
 
       io.to(socket.id).emit("disconnectPlayer", { });
