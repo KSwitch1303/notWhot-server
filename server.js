@@ -31,6 +31,7 @@ const roomCodes = {
   200: {},
   500: {},
 };
+const players = {};
 
 
 io.on("connection", (socket) => {
@@ -60,14 +61,24 @@ io.on("connection", (socket) => {
   });
 
   socket.on("joinRoom", (data) => {
+    const { username, lobbyName } = data;
+      console.log(username, lobbyName);
     try {
-      const { username, lobbyName } = data;
+      
       let len = Object.keys(roomCodes[lobbyName]).length - 1;
       let roomCode = '';
       console.log(roomCodes[lobbyName]);
       if (roomCodes[lobbyName][len]) {
         console.log('not empty');
         console.log(roomCodes[lobbyName][len].players);
+        if(players[username]) {
+          roomCode = players[username];
+          socket.join(players[username]);
+          io.to(socket.id).emit("roomCode", { roomCode: roomCode });
+          socket.to(roomCode).emit("userJoined", { username, userID: socket.id });
+          io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+          return
+        }
         if (roomCodes[lobbyName][len].players === 1) {
           socket.join(roomCodes[lobbyName][len].roomCode);
           roomCodes[lobbyName][len].players++;
@@ -80,6 +91,7 @@ io.on("connection", (socket) => {
             turn: false,
             status: "waiting",
           };
+          players[username] = roomCode;
           console.log(roomCodes[lobbyName]);
           console.log(rooms[roomCode]);
         } else {
@@ -91,6 +103,7 @@ io.on("connection", (socket) => {
           };
           console.log('Created another room');
           InitializeRoom(roomCode, username, lobbyName);
+          players[username] = roomCode;
           console.log(roomCodes[lobbyName]);
           socket.join(roomCode);
         }
@@ -103,6 +116,7 @@ io.on("connection", (socket) => {
           players: 1,
         };
         InitializeRoom(roomCode, username, lobbyName);
+        players[username] = roomCode;
         console.log('Created room');
         console.log(roomCodes[lobbyName]);
         socket.join(roomCode);
@@ -137,8 +151,10 @@ io.on("connection", (socket) => {
         // If the room is empty, you can optionally delete it
         if (Object.keys(rooms[roomCode].players).length === 0) {
           delete rooms[roomCode];
+          players[username] = null;
         } else {
           // Notify remaining users in the room about the player leaving
+          players[username] = null;
           socket.to(roomCode).emit("userLeft", { username, userID: socket.id });
 
           // Send the updated player list to all users in the room
@@ -207,6 +223,20 @@ io.on("connection", (socket) => {
       console.log(error);
     }
   });
+
+  socket.on("reconnect", (data) => {
+    try {
+      const { username } = data;
+      console.log("reconnecting", username);
+      const roomCode = players[username];
+      console.log(players);
+      socket.join(roomCode);
+      console.log(`User with ID: ${socket.id} and name ${username} rejoined room: ${roomCode}`);
+      io.to(socket.id).emit("reconnected", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, room: roomCode });
+    } catch (error) {
+      console.log(error);
+    }
+  })
 
   socket.on("playCard", async (data) => {
     try {
