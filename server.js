@@ -424,13 +424,6 @@ const timerTick = async (roomCode, need) => {
   
 }
 
-// setInterval(() => {
-//   for (const roomCode in rooms) {
-//     if (rooms[roomCode].timer > 0) {
-//       timerTick(roomCode);
-//     }
-//   }
-// }, 1000);
 
 const refillMarket = (roomCode) => {
   if (rooms[roomCode].market.length < 5) {
