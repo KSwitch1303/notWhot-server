@@ -32,7 +32,7 @@ const roomCodes = {
   500: {},
 };
 const players = {};
-
+let ticktok = 0
 
 io.on("connection", (socket) => {
   console.log(`User Connected: ${socket.id}`);
@@ -54,6 +54,7 @@ io.on("connection", (socket) => {
         },
       },
       timer: 0,
+      ticktok: 0,
       market: [],
       playedCards: [],
       currentPlayerIndex: 0,
@@ -181,7 +182,7 @@ io.on("connection", (socket) => {
       const { roomCode } = data;
       playedCards = rooms[roomCode].playedCards;
       console.log(playedCards);
-      io.in(roomCode).emit("playersUpdated", { playedCards, normalCardPlayed: true });
+      io.in(roomCode).emit("playersRejoined", { playedCards, normalCardPlayed: true, players: rooms[roomCode].players, market: rooms[roomCode].market });
     } catch (error) {
       console.log(error);
     }
@@ -232,6 +233,7 @@ io.on("connection", (socket) => {
       console.log(players);
       socket.join(roomCode);
       console.log(`User with ID: ${socket.id} and name ${username} rejoined room: ${roomCode}`);
+      console.log('market', rooms[roomCode].market);
       io.to(socket.id).emit("reconnected", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, room: roomCode });
     } catch (error) {
       console.log(error);
@@ -249,6 +251,7 @@ io.on("connection", (socket) => {
 
         // Move to the next player's turn
         await passTurn(roomCode);
+        rooms[roomCode].timer = 60;
         refillMarket(roomCode);
         for (const player in rooms[roomCode].players) {
           const playerObj = rooms[roomCode].players[player];
@@ -278,6 +281,7 @@ io.on("connection", (socket) => {
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
         await passTurn(roomCode);
+        rooms[roomCode].timer = 60;
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
       }
     } catch (error) {
@@ -291,7 +295,7 @@ io.on("connection", (socket) => {
 
       if (rooms[roomCode].players[username].turn) {
         await passTurn(roomCode);
-
+        rooms[roomCode].timer = 60;
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
       }
     } catch (error) {
@@ -307,7 +311,7 @@ io.on("connection", (socket) => {
       if (rooms[roomCode].players[username].turn) {
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
         await passTurn(roomCode);
-
+        rooms[roomCode].timer = 60;
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
       }
     } catch (error) {
@@ -324,6 +328,7 @@ io.on("connection", (socket) => {
 
         // Move to the next player's turn
         passTurn(roomCode);
+        rooms[roomCode].timer = 60;
         refillMarket(roomCode);
         
         if (need) {
@@ -340,9 +345,9 @@ io.on("connection", (socket) => {
   });
   socket.on("updateTimer", (data) => {
     try {
-      const { roomCode } = dat
-      console.log('tick',);
-      timerTick(roomCode);
+      const { roomCode, need } = data
+      // console.log('tick',);
+      timerTick(roomCode, need);
     } catch (error) {
       console.log(error);
     }
@@ -383,15 +388,40 @@ const InitializeRoom = (roomCode, username, lobbyName) => {
         status: "waiting",
       },
     },
-    timer: 120,
+    timer: 60,
+    ticktok: 0,
     market: [],
     playedCards: [],
     currentPlayerIndex: 0,
   };
 }
-const timerTick = (roomCode) => {
-  rooms[roomCode].timer--;
-  io.in(roomCode).emit("timerTick", { timer: rooms[roomCode].timer });
+const timerTick = async (roomCode, need) => {
+  // console.log('need',need);
+  try {
+    if (rooms[roomCode].ticktok === 0) {
+      if (rooms[roomCode].timer > 0) {
+        rooms[roomCode].timer--;
+        io.in(roomCode).emit("timerTicked", { timer: rooms[roomCode].timer });
+        rooms[roomCode].ticktok = 1;
+      } else {
+        rooms[roomCode].timer = 60;
+        await passTurn(roomCode);
+        if (need) {
+          console.log(need);
+          io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
+          
+        } else {
+          io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+        }
+
+      }
+    } else {
+      rooms[roomCode].ticktok = 0;
+    }
+  } catch (error) {
+    console.log(error);
+  }
+  
 }
 
 // setInterval(() => {
@@ -403,7 +433,7 @@ const timerTick = (roomCode) => {
 // }, 1000);
 
 const refillMarket = (roomCode) => {
-  if (rooms[roomCode].market.length === 1) {
+  if (rooms[roomCode].market.length < 5) {
     //take the played cards and refill the market but leave the last card
     for (let i = 0; i < rooms[roomCode].playedCards.length - 1; i++) {
       rooms[roomCode].market.push(rooms[roomCode].playedCards[i]);
