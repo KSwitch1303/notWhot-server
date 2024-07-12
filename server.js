@@ -607,7 +607,7 @@ app.post("/addTransaction", async (req, res) => {
   const { sender, amount, receiver, detail } = req.body;
   console.log(req.body);
   const transaction = new Transaction({
-    party1: sender,
+    party1: sender || "system",
     party2: receiver,
     amount,
     detail,
