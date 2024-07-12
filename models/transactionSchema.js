@@ -1,11 +1,11 @@
 const mongoose = require('mongoose');
 
 const transactionSchema = new mongoose.Schema({
-  sender: {
+  party1: {
     type: String,
     required: true
   },
-  receiver: {
+  party2: {
     type: String,
     required: true
   },
@@ -17,8 +17,9 @@ const transactionSchema = new mongoose.Schema({
     type: String,
     default: 'pending'
   },
-  tno: {
-    type: String
+  detail: {
+    type: String,
+    required: true
   },
   date: {
     type: Date,

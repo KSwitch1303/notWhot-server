@@ -188,7 +188,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("ready", (data) => {
+  socket.on("ready", async (data) => {
     try {
       const { roomCode, username } = data;
       if (Object.keys(rooms[roomCode].players).length === 1) {
@@ -217,6 +217,8 @@ io.on("connection", (socket) => {
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
 
         // Emit the startGame event to the room with the updated player data
+        console.log('playerrr' ,rooms[roomCode].players);
+        await axios.post(`${process.env.API_URL}/addGame`, { party1: rooms[roomCode].players[playerKeys[0]].username, party2: rooms[roomCode].players[playerKeys[1]].username, amount: rooms[roomCode].players[playerKeys[0]].wager });
         io.in(roomCode).emit("startGame", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: true });
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
       }
@@ -358,9 +360,11 @@ io.on("connection", (socket) => {
 
       if (winStatus === "win") {
         await increaseBalance(roomCode, username, amount, wager);
+        await axios.post(`${process.env.API_URL}/addWin`, { party1: username, party2: roomCode, amount: amount, });
         // remove player
         delete players[username];
       } else if (winStatus === "loss") {
+        await axios.post(`${process.env.API_URL}/addLoss`, { party1: username, party2: roomCode, amount: amount, });
         // await decreaseBalance(roomCode, username, amount);
         delete players[username];
       }
@@ -585,13 +589,13 @@ app.post("/update", async (req, res) => {
 })
 
 app.post("/addTransaction", async (req, res) => {
-  const { sender, amount, receiver, tno } = req.body;
+  const { sender, amount, receiver, detail } = req.body;
   console.log(req.body);
   const transaction = new Transaction({
-    sender,
-    receiver,
+    party1: sender,
+    party2: receiver,
     amount,
-    tno
+    detail,
   })
   try {
     await transaction.save();
@@ -611,10 +615,10 @@ const increaseBalance = async (roomCode, username, amount, wager) => {
   try {
     await user.save();
     await axios.post(`${process.env.API_URL}/addTransaction`, {
-      sender: "game win",
+      detail: "win",
       amount: balUpdate,
-      receiver: username,
-      tno: Math.floor(Math.random() * 1000000000)
+      party2: username,
+      party1: "system",
     })    
   } catch (error) {
     console.error(error);
@@ -649,10 +653,11 @@ const placeBet = async (roomCode, username, amount) => {
   try {
     await user.save();
     await axios.post(`${process.env.API_URL}/addTransaction`, {
-      sender: "bet placed",
+      detail: "bet placed",
       amount: `-${amount}`,
-      receiver: username,
-      tno: Math.floor(Math.random() * 1000000000)
+      sender: username,
+      receiver: "system",
+      status: "successful",
     })
     return 'Bet placed successfully'
   } catch (error) {
@@ -679,9 +684,10 @@ app.get("/getTransactions", async (req, res) => {
   res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
 })
 
+
 app.get("/getTransactions/:username", async (req, res) => {
   const { username } = req.params;
-  let unsorted_transactions = await Transaction.find({ sender: username });
+  let unsorted_transactions = await Transaction.find({ party1: username });
   console.log(typeof(unsorted_transactions))
   // unsorted_transactions = unsorted_transactions.concat(await Transaction.find({ receiver: username }));
   // sort by the latest
@@ -702,7 +708,127 @@ app.post("/updateTransaction", async (req, res) => {
   }
 })
 
+app.post("/addGame", async (req, res) => {
+  const { party1, party2, amount } = req.body;
+  const transaction = new Transaction({
+    party1,
+    party2,
+    amount,
+    detail: "game",
+    status: "started",
+  })
+  try {
+    await transaction.save();
+    res.status(200).json({ message: "Transaction added successfully", success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error adding transaction" });
+  }
+})
 
+app.get("/getGames", async (req, res) => {
+  const transactions = await Transaction.find({ detail: "game" });
+  try {
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error fetching transactions" });
+  }
+})
+
+app.post("/addWithdrawal", async (req, res) => {
+  const { party2, amount } = req.body;
+  const transaction = new Transaction({
+    party1: "system",
+    amount,
+    party2,
+    detail: "withdrawal",
+  })
+  try {
+    await transaction.save();
+    const user = await User.findOne({ username: party2 });
+    user.balance -= amount;
+    await user.save();
+    res.status(200).json({ message: "Transaction added successfully", success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error adding transaction" });
+  }
+})
+
+app.get("/getWithdrawals", async (req, res) => {
+  const transactions = await Transaction.find({ detail: "withdrawal" });
+  try {
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error fetching transactions" });
+  }
+})
+
+app.post("/addWin", async (req, res) => {
+  const { party1, party2, amount } = req.body;
+  const transaction = new Transaction({
+    party1,
+    amount,
+    party2,
+    detail: "win",
+  })
+  try {
+    await transaction.save();
+    res.status(200).json({ message: "Transaction added successfully", success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error adding transaction" });
+  }
+})
+
+app.get('/getWins', async (req, res) => {
+  const transactions = await Transaction.find({ detail: "win" });
+  try {
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error fetching transactions" });
+  }
+})
+
+app.post("/addLoss", async (req, res) => {
+  const { party1, party2, amount } = req.body;
+  const transaction = new Transaction({
+    party1,
+    amount,
+    party2,
+    detail: "loss",
+  })
+  try {
+    await transaction.save();
+    res.status(200).json({ message: "Transaction added successfully", success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error adding transaction" });
+  }
+})
+
+app.get('/getLosses', async (req, res) => {
+  const transactions = await Transaction.find({ detail: "loss" });
+  try {
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error fetching transactions" });
+  }
+})
+
+app.get('/getPayments', async (req, res) => {
+  const transactions = await Transaction.find({ detail: "topup" });
+  try {
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error fetching transactions" });
+  }
+})
 
 app.get("/paystackInit", async (req, res) => {
   // const { amount, email } = req.body;
