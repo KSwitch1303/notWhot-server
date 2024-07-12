@@ -236,6 +236,11 @@ io.on("connection", (socket) => {
       socket.join(roomCode);
       console.log(`User with ID: ${socket.id} and name ${username} rejoined room: ${roomCode}`);
       console.log('market', rooms[roomCode].market);
+      if (!rooms[roomCode]) {
+        io.to(socket.id).emit("leaveGame", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, room: roomCode });
+        socket.leave(roomCode);
+        return;
+      }
       io.to(socket.id).emit("reconnected", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, room: roomCode });
     } catch (error) {
       console.log(error);
