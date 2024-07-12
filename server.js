@@ -192,6 +192,8 @@ io.on("connection", (socket) => {
     try {
       const { roomCode, username } = data;
       if (Object.keys(rooms[roomCode].players).length === 1) {
+        console.log(`Not all players are ready in room: ${roomCode}`);
+        io.to(socket.id).emit("notAllPlayersReady");
         return;
       }
       rooms[roomCode].players[username].status = "ready";
@@ -221,7 +223,7 @@ io.on("connection", (socket) => {
         await axios.post(`${process.env.API_URL}/addGame`, { party1: rooms[roomCode].players[playerKeys[0]].username, party2: rooms[roomCode].players[playerKeys[1]].username, amount: rooms[roomCode].players[playerKeys[0]].wager });
         io.in(roomCode).emit("startGame", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: true });
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
-      }
+      } 
     } catch (error) {
       console.log(error);
     }
