@@ -373,10 +373,12 @@ io.on("connection", (socket) => {
         await increaseBalance(roomCode, username, amount, wager);
         await axios.post(`${process.env.API_URL}/addWin`, { party1: username, party2: roomCode, amount: amount, });
         // remove player
+        delete rooms[roomCode];
         delete players[username];
       } else if (winStatus === "loss") {
         await axios.post(`${process.env.API_URL}/addLoss`, { party1: username, party2: roomCode, amount: amount, });
         // await decreaseBalance(roomCode, username, amount);
+        delete rooms[roomCode];
         delete players[username];
       }
 
