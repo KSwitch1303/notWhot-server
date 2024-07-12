@@ -830,6 +830,97 @@ app.get('/getPayments', async (req, res) => {
   }
 })
 
+app.post("/updateBalance", async (req, res) => {
+  const { transactionId, status, amount } = req.body;
+  try {
+    const transaction = await Transaction.findById(transactionId);
+    transaction.status = status;
+    if (status === "Approved") {
+      const user = await User.findOne({ accountName: transaction.party1 });
+      user.balance += amount;
+      await user.save();
+    }
+    await transaction.save();
+    res.status(200).json({ message: "Transaction updated successfully", success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error updating transaction" });
+  }
+})
+
+app.post("/reduceBalance", async (req, res) => {
+  const { transactionId, status, amount } = req.body;
+  try {
+    const transaction = await Transaction.findById(transactionId);
+    transaction.status = "Failed";
+      const user = await User.findOne({ accountName: transaction.party1 });
+      user.balance -= amount;
+      await user.save();
+    
+    await transaction.save();
+    res.status(200).json({ message: "Transaction updated successfully", success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error updating transaction" });
+  }
+})
+
+app.get("/getTopup/:accountName", async (req, res) => {
+  const unsortedtransactions = await Transaction.find({ detail: "topup", party1: req.params.accountName });
+  const transactions = unsortedtransactions.sort((a, b) => b.date - a.date);
+  try {
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error fetching transactions" });
+  }
+})
+
+app.get("/getWithdraw/:username", async (req, res) => {
+  const unsortedtransactions = await Transaction.find({ detail: "withdrawal", party2: req.params.username });
+  const transactions = unsortedtransactions.sort((a, b) => b.date - a.date);
+  try {
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error fetching transactions" });
+  }
+})
+
+app.get("/getGame/:username", async (req, res) => {
+  // const unsortedtransactions = await Transaction.find({ detail: "game", party2: req.params.username });
+  const unsortedtransactions = await Transaction.find({$or:[{ detail: "game", party2: req.params.username },{ detail: "game", party1: req.params.username }]});
+  const transactions = unsortedtransactions.sort((a, b) => b.date - a.date);
+  try {
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error fetching transactions" });
+  }
+})
+
+app.get("/getWin/:username", async (req, res) => {
+  const unsortedtransactions = await Transaction.find({ detail: "win", party1: req.params.username });
+  const transactions = unsortedtransactions.sort((a, b) => b.date - a.date);
+  try {
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error fetching transactions" });
+  }
+})
+
+app.get("/getLoss/:username", async (req, res) => {
+  const unsortedtransactions = await Transaction.find({ detail: "loss", party1: req.params.username });
+  const transactions = unsortedtransactions.sort((a, b) => b.date - a.date);
+  try {
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error fetching transactions" });
+  }
+})
+
 app.get("/paystackInit", async (req, res) => {
   // const { amount, email } = req.body;
   amount = 1000 * 100
