@@ -230,17 +230,20 @@ io.on("connection", (socket) => {
   socket.on("reconnect", (data) => {
     try {
       const { username } = data;
-      console.log("reconnecting", username);
       const roomCode = players[username];
+      if (!rooms[roomCode]) {
+        io.to(socket.id).emit("leaveGame");
+        socket.leave(roomCode);
+        console.log(`User with ID: ${socket.id} and name ${username} left room: ${roomCode}`);
+        return;
+      }
+      console.log("reconnecting", username);
+      
       console.log(players);
       socket.join(roomCode);
       console.log(`User with ID: ${socket.id} and name ${username} rejoined room: ${roomCode}`);
       console.log('market', rooms[roomCode].market);
-      if (!rooms[roomCode]) {
-        io.to(socket.id).emit("leaveGame", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, room: roomCode });
-        socket.leave(roomCode);
-        return;
-      }
+      
       io.to(socket.id).emit("reconnected", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, room: roomCode });
     } catch (error) {
       console.log(error);
@@ -354,7 +357,10 @@ io.on("connection", (socket) => {
     try {
       const { roomCode, need } = data
       // console.log('tick',);
-      timerTick(roomCode, need);
+      if (rooms[roomCode]) {
+        timerTick(roomCode, need);
+      }
+      
     } catch (error) {
       console.log(error);
     }
