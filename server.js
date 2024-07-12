@@ -32,6 +32,7 @@ const roomCodes = {
   500: {},
 };
 const players = {};
+const users = {};
 let ticktok = 0
 
 io.on("connection", (socket) => {
@@ -68,11 +69,13 @@ io.on("connection", (socket) => {
       
       let len = Object.keys(roomCodes[lobbyName]).length - 1;
       let roomCode = '';
+      console.log('omo', roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]]);
       console.log(roomCodes[lobbyName]);
-      if (roomCodes[lobbyName][len]) {
+      if (roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]]) {
         console.log('not empty');
-        console.log(roomCodes[lobbyName][len].players);
+        console.log(roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].players);
         if(players[username]) {
+          console.log('sui');
           roomCode = players[username];
           socket.join(players[username]);
           io.to(socket.id).emit("roomCode", { roomCode: roomCode });
@@ -80,11 +83,13 @@ io.on("connection", (socket) => {
           io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
           return
         }
-        if (roomCodes[lobbyName][len].players === 1) {
-          socket.join(roomCodes[lobbyName][len].roomCode);
-          roomCodes[lobbyName][len].players++;
+        console.log('sui2');
+        if (roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].players === 1) {
+          console.log('sui3');
+          socket.join(roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].roomCode);
+          roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].players++;
           console.log('joined room');
-          roomCode = roomCodes[lobbyName][len].roomCode;
+          roomCode = roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].roomCode;
           rooms[roomCode].players[username] = {
             username: username,
             cards: [],
@@ -93,18 +98,26 @@ io.on("connection", (socket) => {
             status: "waiting",
           };
           players[username] = roomCode;
+          users[socket.id] = {
+            username: username,
+            roomCode: roomCode,
+          };
           console.log(roomCodes[lobbyName]);
           console.log(rooms[roomCode]);
         } else {
           console.log('creating new room');
           roomCode = socket.id + '-' + Math.floor(Math.random() * 1000000000);
-          roomCodes[lobbyName][len + 1] = {
+          roomCodes[lobbyName][roomCode] = {
             roomCode: roomCode,
             players: 1,
           };
           console.log('Created another room');
           InitializeRoom(roomCode, username, lobbyName);
           players[username] = roomCode;
+          users[socket.id] = {
+            username: username,
+            roomCode: roomCode,
+          };
           console.log(roomCodes[lobbyName]);
           socket.join(roomCode);
         }
@@ -112,12 +125,16 @@ io.on("connection", (socket) => {
         console.log('empty');
         // generate room code
         roomCode = socket.id + '-' + Math.floor(Math.random() * 1000000000);
-        roomCodes[lobbyName][0] = {
+        roomCodes[lobbyName][roomCode] = {
           roomCode: roomCode,
           players: 1,
         };
         InitializeRoom(roomCode, username, lobbyName);
         players[username] = roomCode;
+        users[socket.id] = {
+          username: username,
+          roomCode: roomCode,
+        };
         console.log('Created room');
         console.log(roomCodes[lobbyName]);
         socket.join(roomCode);
@@ -142,7 +159,7 @@ io.on("connection", (socket) => {
 
   socket.on("leaveRoom", (data) => {
     try {
-      const { roomCode, username } = data;
+      const { roomCode, username, lobbyName } = data;
       socket.leave(roomCode);
       console.log(`User with ID: ${socket.id} and name ${username} left room: ${roomCode}`);
 
@@ -152,10 +169,14 @@ io.on("connection", (socket) => {
         // If the room is empty, you can optionally delete it
         if (Object.keys(rooms[roomCode].players).length === 0) {
           delete rooms[roomCode];
-          players[username] = null;
+          delete players[username];
+          delete users[socket.id];
+          delete roomCodes[lobbyName][roomCode];
+          console.log(roomCodes[lobbyName]);
         } else {
           // Notify remaining users in the room about the player leaving
-          players[username] = null;
+          delete players[username];
+          delete users[socket.id];
           socket.to(roomCode).emit("userLeft", { username, userID: socket.id });
 
           // Send the updated player list to all users in the room
@@ -179,10 +200,16 @@ io.on("connection", (socket) => {
 
   socket.on("updatePlayedCards", (data) => {
     try {
-      const { roomCode } = data;
+      const { roomCode, userID } = data;
       playedCards = rooms[roomCode].playedCards;
-      console.log(playedCards);
-      io.in(roomCode).emit("playersRejoined", { playedCards, normalCardPlayed: true, players: rooms[roomCode].players, market: rooms[roomCode].market });
+      console.log('userID', userID);
+      users[socket.id] = {
+        username: users[userID].username,
+        roomCode: roomCode,
+      }
+      delete users[userID];
+      console.log(users);
+      io.in(roomCode).emit("playersRejoined", { playedCards, normalCardPlayed: true, players: rooms[roomCode].players, market: rooms[roomCode].market, need: rooms[roomCode].cardNeeded, userID: socket.id });
     } catch (error) {
       console.log(error);
     }
@@ -220,8 +247,12 @@ io.on("connection", (socket) => {
 
         // Emit the startGame event to the room with the updated player data
         console.log('playerrr' ,rooms[roomCode].players);
-        await axios.post(`${process.env.API_URL}/addGame`, { party1: rooms[roomCode].players[playerKeys[0]].username, party2: rooms[roomCode].players[playerKeys[1]].username, amount: rooms[roomCode].players[playerKeys[0]].wager });
-        io.in(roomCode).emit("startGame", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: true });
+        if (rooms[roomCode].started === false) {
+          await axios.post(`${process.env.API_URL}/addGame`, { party1: rooms[roomCode].players[playerKeys[0]].username, party2: rooms[roomCode].players[playerKeys[1]].username, amount: rooms[roomCode].players[playerKeys[0]].wager });
+          rooms[roomCode].started = true;
+        }
+        
+        io.in(roomCode).emit("startGame", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: true, userID: socket.id });
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
       } 
     } catch (error) {
@@ -367,6 +398,18 @@ io.on("connection", (socket) => {
       console.log(error);
     }
   })
+  socket.on("updateWaitTimer", (data) => {
+    try {
+      const { roomCode } = data
+      // console.log('tick',);
+      if (rooms[roomCode]) {
+        waitTimer(roomCode);
+      }
+      
+    } catch (error) {
+      console.log(error);
+    }
+  })
   socket.on("endGame", async (data) => {
     try {
       const { roomCode, username, winStatus, amount, wager } = data;
@@ -377,11 +420,14 @@ io.on("connection", (socket) => {
         // remove player
         delete rooms[roomCode];
         delete players[username];
+        delete users[socket.id]
       } else if (winStatus === "loss") {
         await axios.post(`${process.env.API_URL}/addLoss`, { party1: username, party2: roomCode, amount: amount, });
         // await decreaseBalance(roomCode, username, amount);
         delete rooms[roomCode];
         delete players[username];
+        delete users[socket.id]
+        
       }
 
       io.to(socket.id).emit("disconnectPlayer", { });
@@ -392,7 +438,13 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log(`User Disconnected: ${socket.id}`);
-    // Logic to handle player disconnection (if needed)
+    // Logic to handle player disconnection 
+    
+    if (users[socket.id]) {
+      console.log('users', users[socket.id]);
+      io.to(users[socket.id].roomCode).emit("waitingOnUser", { usersname: users[socket.id].username, userID: socket.id });
+    }
+    
   });
 });
 
@@ -409,9 +461,13 @@ const InitializeRoom = (roomCode, username, lobbyName) => {
     },
     timer: 60,
     ticktok: 0,
+    waitTimer: 300,
+    waitTick: 0,
     market: [],
     playedCards: [],
     currentPlayerIndex: 0,
+    normalCardPlayed: true,
+    started: false,
   };
 }
 const timerTick = async (roomCode, need) => {
@@ -436,6 +492,27 @@ const timerTick = async (roomCode, need) => {
       }
     } else {
       rooms[roomCode].ticktok = 0;
+    }
+  } catch (error) {
+    console.log(error);
+  }
+  
+}
+const waitTimer = async (roomCode) => {
+  // console.log('need',need);
+  try {
+    if (rooms[roomCode].waitTick === 0) {
+      if (rooms[roomCode].timer > 0) {
+        rooms[roomCode].waitTimer--;
+        io.in(roomCode).emit("waitTimerTicked", { timer: rooms[roomCode].waitTimer });
+        rooms[roomCode].waitTick = 1;
+      } else {
+        rooms[roomCode].waitTimer = 300;
+        // refillMarket(roomCode);
+        // io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+      }
+    } else {
+      rooms[roomCode].waitTick = 0;
     }
   } catch (error) {
     console.log(error);
