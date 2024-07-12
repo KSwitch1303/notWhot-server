@@ -529,7 +529,7 @@ const passTurn = (roomCode) => {
 
 app.post("/signup", async (req, res) => {
   const { username, password, bank, accountNo, accountName } = req.body;
-  console.log(req.body);
+  // console.log(req.body);
   const userExists = await checkIfUserExists(username);
   if (userExists) {
     res.status(201).json({ message: "User already exists" });
