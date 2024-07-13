@@ -743,12 +743,12 @@ const increaseBalance = async (roomCode, username, amount, wager) => {
   try {
     await user.save();
     // console.log(user);
-    await axios.post(`${process.env.API_URL}/addTransaction`, {
-      detail: "win",
-      amount: balUpdate,
-      receiver: username,
-      sender: "system",
-    })    
+    // await axios.post(`${process.env.API_URL}/addTransaction`, {
+    //   detail: "win",
+    //   amount: balUpdate,
+    //   receiver: username,
+    //   sender: "system",
+    // })    
   } catch (error) {
     console.error(error);
   }
@@ -1049,6 +1049,23 @@ app.get("/getLoss/:username", async (req, res) => {
     res.status(201).json({ message: "Error fetching transactions" });
   }
 })
+
+app.get("/getLeaderboard", async (req, res) => {
+  try {
+    const leaderboard = await Transaction.aggregate([
+      { $match: { detail: "win" } }, // Filter for "win" transactions
+      { $group: { _id: "$party1", totalWinnings: { $sum: "$amount" } } }, // Group by party1 and sum the amounts
+      { $sort: { totalWinnings: -1 } }, // Sort by totalWinnings in descending order
+      { $project: { _id: 0, username: "$_id", totalWinnings: 1 } } // Project the fields we want in the result
+    ]);
+    console.log(leaderboard);
+    const topThree = leaderboard.slice(0, 3);
+    res.status(200).json({ message: "Leaderboard fetched successfully", success: true, leaderboard: topThree });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error fetching leaderboard", success: false });
+  }
+});
 
 app.get("/paystackInit", async (req, res) => {
   // const { amount, email } = req.body;
