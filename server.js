@@ -64,18 +64,18 @@ io.on("connection", (socket) => {
 
   socket.on("joinRoom", (data) => {
     const { username, lobbyName } = data;
-      console.log(username, lobbyName);
+      // console.log(username, lobbyName);
     try {
       
       let len = Object.keys(roomCodes[lobbyName]).length - 1;
       let roomCode = '';
-      console.log('omo', roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]]);
-      console.log(roomCodes[lobbyName]);
+      // console.log('omo', roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]]);
+      // console.log(roomCodes[lobbyName]);
       if (roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]]) {
-        console.log('not empty');
-        console.log(roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].players);
+        // console.log('not empty');
+        // console.log(roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].players);
         if(players[username]) {
-          console.log('sui');
+          // console.log('sui');
           roomCode = players[username];
           socket.join(players[username]);
           io.to(socket.id).emit("roomCode", { roomCode: roomCode });
@@ -83,12 +83,12 @@ io.on("connection", (socket) => {
           io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
           return
         }
-        console.log('sui2');
+        // console.log('sui2');
         if (roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].players === 1) {
-          console.log('sui3');
+          // console.log('sui3');
           socket.join(roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].roomCode);
           roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].players++;
-          console.log('joined room');
+          // console.log('joined room');
           roomCode = roomCodes[lobbyName][Object.keys(roomCodes[lobbyName])[len]].roomCode;
           rooms[roomCode].players[username] = {
             username: username,
@@ -102,8 +102,8 @@ io.on("connection", (socket) => {
             username: username,
             roomCode: roomCode,
           };
-          console.log(roomCodes[lobbyName]);
-          console.log(rooms[roomCode]);
+          // console.log(roomCodes[lobbyName]);
+          // console.log(rooms[roomCode]);
         } else {
           console.log('creating new room');
           roomCode = socket.id + '-' + Math.floor(Math.random() * 1000000000);
@@ -111,18 +111,18 @@ io.on("connection", (socket) => {
             roomCode: roomCode,
             players: 1,
           };
-          console.log('Created another room');
+          // console.log('Created another room');
           InitializeRoom(roomCode, username, lobbyName);
           players[username] = roomCode;
           users[socket.id] = {
             username: username,
             roomCode: roomCode,
           };
-          console.log(roomCodes[lobbyName]);
+          // console.log(roomCodes[lobbyName]);
           socket.join(roomCode);
         }
       } else {
-        console.log('empty');
+        // console.log('empty');
         // generate room code
         roomCode = socket.id + '-' + Math.floor(Math.random() * 1000000000);
         roomCodes[lobbyName][roomCode] = {
@@ -135,8 +135,8 @@ io.on("connection", (socket) => {
           username: username,
           roomCode: roomCode,
         };
-        console.log('Created room');
-        console.log(roomCodes[lobbyName]);
+        // console.log('Created room');
+        // console.log(roomCodes[lobbyName]);
         socket.join(roomCode);
       }
       
@@ -161,7 +161,7 @@ io.on("connection", (socket) => {
     try {
       const { roomCode, username, lobbyName } = data;
       socket.leave(roomCode);
-      console.log(`User with ID: ${socket.id} and name ${username} left room: ${roomCode}`);
+      // console.log(`User with ID: ${socket.id} and name ${username} left room: ${roomCode}`);
 
       // Remove the player from the room
       if (rooms[roomCode]) {
@@ -170,9 +170,10 @@ io.on("connection", (socket) => {
         if (Object.keys(rooms[roomCode].players).length === 0) {
           delete rooms[roomCode];
           delete players[username];
+          
           delete users[socket.id];
           delete roomCodes[lobbyName][roomCode];
-          console.log(roomCodes[lobbyName]);
+          // console.log(roomCodes[lobbyName]);
         } else {
           // Notify remaining users in the room about the player leaving
           delete players[username];
@@ -188,6 +189,15 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("chat", (data) => {
+    try {
+      const { roomCode, username, chat } = data;
+      socket.to(roomCode).emit("receiveChat", { username, chat });
+    } catch (error) {
+      console.log(error);
+    }
+  })
+
   socket.on("updatePlayers", (data) => {
     try {
       const { roomCode, players } = data;
@@ -202,24 +212,41 @@ io.on("connection", (socket) => {
     try {
       const { roomCode, userID } = data;
       playedCards = rooms[roomCode].playedCards;
-      console.log('userID', userID);
+      // console.log('userID', userID);
       users[socket.id] = {
         username: users[userID].username,
         roomCode: roomCode,
       }
       delete users[userID];
-      console.log(users);
+      // console.log(users);
       io.in(roomCode).emit("playersRejoined", { playedCards, normalCardPlayed: true, players: rooms[roomCode].players, market: rooms[roomCode].market, need: rooms[roomCode].cardNeeded, userID: socket.id });
     } catch (error) {
       console.log(error);
     }
   });
 
+  socket.on("checkWaiting", (data) => {
+    try {
+      const { roomCode, userID, opponent } = data;
+      playedCards = rooms[roomCode].playedCards;
+      // console.log('userID', userID);
+      users[socket.id] = {
+        username: users[userID].username,
+        roomCode: roomCode,
+      }
+      delete users[userID];
+      // console.log(users);
+      io.in(roomCode).emit("checkWaitingStatus", { opponent, playedCards, normalCardPlayed: true, players: rooms[roomCode].players, market: rooms[roomCode].market, need: rooms[roomCode].cardNeeded, userID: socket.id });
+    } catch (error) {
+      console.log(error);
+    }
+  })
+
   socket.on("ready", async (data) => {
     try {
       const { roomCode, username } = data;
       if (Object.keys(rooms[roomCode].players).length === 1) {
-        console.log(`Not all players are ready in room: ${roomCode}`);
+        // console.log(`Not all players are ready in room: ${roomCode}`);
         io.to(socket.id).emit("notAllPlayersReady");
         return;
       }
@@ -246,7 +273,7 @@ io.on("connection", (socket) => {
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
 
         // Emit the startGame event to the room with the updated player data
-        console.log('playerrr' ,rooms[roomCode].players);
+        // console.log('playerrr' ,rooms[roomCode].players);
         if (rooms[roomCode].started === false) {
           await axios.post(`${process.env.API_URL}/addGame`, { party1: rooms[roomCode].players[playerKeys[0]].username, party2: rooms[roomCode].players[playerKeys[1]].username, amount: rooms[roomCode].players[playerKeys[0]].wager });
           rooms[roomCode].started = true;
@@ -267,15 +294,15 @@ io.on("connection", (socket) => {
       if (!rooms[roomCode]) {
         io.to(socket.id).emit("leaveGame");
         socket.leave(roomCode);
-        console.log(`User with ID: ${socket.id} and name ${username} left room: ${roomCode}`);
+        // console.log(`User with ID: ${socket.id} and name ${username} left room: ${roomCode}`);
         return;
       }
-      console.log("reconnecting", username);
+      // console.log("reconnecting", username);
       
-      console.log(players);
+      // console.log(players);
       socket.join(roomCode);
-      console.log(`User with ID: ${socket.id} and name ${username} rejoined room: ${roomCode}`);
-      console.log('market', rooms[roomCode].market);
+      // console.log(`User with ID: ${socket.id} and name ${username} rejoined room: ${roomCode}`);
+      // console.log('market', rooms[roomCode].market);
       
       io.to(socket.id).emit("reconnected", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, room: roomCode });
     } catch (error) {
@@ -298,13 +325,13 @@ io.on("connection", (socket) => {
         refillMarket(roomCode);
         for (const player in rooms[roomCode].players) {
           const playerObj = rooms[roomCode].players[player];
-          console.log(playerObj);
+          // console.log(playerObj);
           if (playerObj.cards.length === 0) {
             gameWon(roomCode, player);
           }
         }
         if (need) {
-          console.log(need);
+          // console.log(need);
           io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
           return;
         }
@@ -319,7 +346,7 @@ io.on("connection", (socket) => {
   socket.on("pickTwo", async (data) => {
     try {
       const { roomCode, username } = data;
-      console.log(rooms);
+      // console.log(rooms);
       if (rooms[roomCode].players[username].turn) {
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
@@ -375,7 +402,7 @@ io.on("connection", (socket) => {
         refillMarket(roomCode);
         
         if (need) {
-          console.log(need);
+          // console.log(need);
           io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
           return;
         }
@@ -420,6 +447,14 @@ io.on("connection", (socket) => {
         // remove player
         delete rooms[roomCode];
         delete players[username];
+        // console.log(players);
+          // delete the other username in players with the same roomCode
+          Object.keys(players).forEach((key) => {
+            if (players[key] === roomCode) {
+              delete players[key];
+            }
+          })
+          // console.log(players);
         delete users[socket.id]
       } else if (winStatus === "loss") {
         await axios.post(`${process.env.API_URL}/addLoss`, { party1: username, party2: roomCode, amount: amount, });
@@ -441,7 +476,7 @@ io.on("connection", (socket) => {
     // Logic to handle player disconnection 
     
     if (users[socket.id]) {
-      console.log('users', users[socket.id]);
+      // console.log('users', users[socket.id]);
       io.to(users[socket.id].roomCode).emit("waitingOnUser", { usersname: users[socket.id].username, userID: socket.id });
     }
     
@@ -482,7 +517,7 @@ const timerTick = async (roomCode, need) => {
         rooms[roomCode].timer = 60;
         await passTurn(roomCode);
         if (need) {
-          console.log(need);
+          // console.log(need);
           io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
           
         } else {
@@ -530,7 +565,7 @@ const refillMarket = (roomCode) => {
     rooms[roomCode].playedCards = [rooms[roomCode].playedCards[rooms[roomCode].playedCards.length - 1]];
     //shuffle the market
     rooms[roomCode].market = rooms[roomCode].market.sort(() => Math.random() - 0.5);
-    console.log(rooms[roomCode]);
+    // console.log(rooms[roomCode]);
     // console.log(rooms[roomCode].market);
   }
 }
@@ -682,9 +717,9 @@ app.post("/update", async (req, res) => {
 
 app.post("/addTransaction", async (req, res) => {
   const { sender, amount, receiver, detail } = req.body;
-  console.log(req.body);
+  // console.log(req.body);
   const transaction = new Transaction({
-    party1: sender || "system",
+    party1: sender,
     party2: receiver,
     amount,
     detail,
@@ -699,18 +734,20 @@ app.post("/addTransaction", async (req, res) => {
 })
 
 const increaseBalance = async (roomCode, username, amount, wager) => {
-  console.log('increasing amount')
+  // console.log('increasing amount')
   const user = await User.findOne({ username });
-  console.log(user)
+  // console.log(user)
+  // console.log('params', roomCode, username, amount, wager);
   balUpdate = (amount + wager);
   user.balance += balUpdate;
   try {
     await user.save();
+    // console.log(user);
     await axios.post(`${process.env.API_URL}/addTransaction`, {
       detail: "win",
       amount: balUpdate,
-      party2: username,
-      party1: "system",
+      receiver: username,
+      sender: "system",
     })    
   } catch (error) {
     console.error(error);
@@ -719,9 +756,9 @@ const increaseBalance = async (roomCode, username, amount, wager) => {
 };
 
 const decreaseBalance = async (roomCode, username, amount) => {
-  console.log('dereasing amount', username, amount)
+  // console.log('dereasing amount', username, amount)
   const user = await User.findOne({ username });
-  console.log(user)
+  // console.log(user)
   user.balance -= amount;
   try {
     await user.save();
@@ -738,9 +775,9 @@ const decreaseBalance = async (roomCode, username, amount) => {
 
 const placeBet = async (roomCode, username, amount) => {
   const user = await User.findOne({ username });
-  console.log(user)
-  console.log(`balance is ${user.balance}`)
-  console.log(amount, typeof(amount))
+  // console.log(user)
+  // console.log(`balance is ${user.balance}`)
+  // console.log(amount, typeof(amount))
   user.balance -= Number(amount);
   try {
     await user.save();
@@ -780,7 +817,7 @@ app.get("/getTransactions", async (req, res) => {
 app.get("/getTransactions/:username", async (req, res) => {
   const { username } = req.params;
   let unsorted_transactions = await Transaction.find({ party1: username });
-  console.log(typeof(unsorted_transactions))
+  // console.log(typeof(unsorted_transactions))
   // unsorted_transactions = unsorted_transactions.concat(await Transaction.find({ receiver: username }));
   // sort by the latest
   const transactions = unsorted_transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -829,16 +866,16 @@ app.get("/getGames", async (req, res) => {
 })
 
 app.post("/addWithdrawal", async (req, res) => {
-  const { party2, amount } = req.body;
+  const { party2, amount, party1, username } = req.body;
   const transaction = new Transaction({
-    party1: "system",
+    party1: party1 + " - " + party2,
     amount,
-    party2,
+    party2 : username,
     detail: "withdrawal",
   })
   try {
     await transaction.save();
-    const user = await User.findOne({ username: party2 });
+    const user = await User.findOne({ username });
     user.balance -= amount;
     await user.save();
     res.status(200).json({ message: "Transaction added successfully", success: true });
