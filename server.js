@@ -428,10 +428,11 @@ io.on("connection", (socket) => {
   })
   socket.on("updateWaitTimer", (data) => {
     try {
-      const { roomCode } = data
+      const { roomCode, username } = data
+      // console.log(username);
       // console.log('tick',);
       if (rooms[roomCode]) {
-        waitTimer(roomCode);
+        waitTimer(roomCode, username);
       }
       
     } catch (error) {
@@ -547,16 +548,27 @@ const timerTick = async (roomCode, need) => {
   }
   
 }
-const waitTimer = async (roomCode) => {
+const waitTimer = async (roomCode, username) => {
   // console.log('need',need);
   try {
     if (rooms[roomCode].waitTick === 0) {
-      if (rooms[roomCode].timer > 0) {
+      if (rooms[roomCode].waitTimer > 0) {
         rooms[roomCode].waitTimer--;
         io.in(roomCode).emit("waitTimerTicked", { timer: rooms[roomCode].waitTimer });
         rooms[roomCode].waitTick = 1;
       } else {
-        rooms[roomCode].waitTimer = 180;
+        console.log('phase1');
+        for (const player in rooms[roomCode].players) {
+          const playerObj = rooms[roomCode].players[player];
+          // console.log('phase2', username , playerObj);
+          console.log(playerObj.username, username ,player.username === username);
+          if (playerObj.username === username) {
+            // console.log('phase3');
+            gameWon(roomCode, player);
+          }
+        }
+        // gameWon(roomCode, player);
+        // rooms[roomCode].waitTimer = 180;
         // refillMarket(roomCode);
         // io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
       }
@@ -756,7 +768,7 @@ const increaseBalance = async (roomCode, username, amount, wager) => {
   const user = await User.findOne({ username });
   // console.log(user)
   // console.log('params', roomCode, username, amount, wager);
-  balUpdate = (amount);
+  balUpdate = (amount + wager);
   user.balance += balUpdate;
   try {
     await user.save();
