@@ -30,6 +30,7 @@ const roomCodes = {
   100: {},
   200: {},
   500: {},
+  1000: {},
 };
 const players = {};
 const users = {};
@@ -210,7 +211,7 @@ io.on("connection", (socket) => {
 
   socket.on("updatePlayedCards", (data) => {
     try {
-      const { roomCode, userID } = data;
+      const { roomCode, userID, username } = data;
       playedCards = rooms[roomCode].playedCards;
       // console.log('userID', userID);
       users[socket.id] = {
@@ -219,7 +220,7 @@ io.on("connection", (socket) => {
       }
       delete users[userID];
       // console.log(users);
-      io.in(roomCode).emit("playersRejoined", { playedCards, normalCardPlayed: true, players: rooms[roomCode].players, market: rooms[roomCode].market, need: rooms[roomCode].cardNeeded, userID: socket.id });
+      io.in(roomCode).emit("playersRejoined", { playedCards, normalCardPlayed: true, players: rooms[roomCode].players, market: rooms[roomCode].market, need: rooms[roomCode].cardNeeded, userID: socket.id, username: username });
     } catch (error) {
       console.log(error);
     }
@@ -321,7 +322,7 @@ io.on("connection", (socket) => {
 
         // Move to the next player's turn
         await passTurn(roomCode);
-        rooms[roomCode].timer = 60;
+        rooms[roomCode].timer = 30;
         refillMarket(roomCode);
         for (const player in rooms[roomCode].players) {
           const playerObj = rooms[roomCode].players[player];
@@ -351,7 +352,7 @@ io.on("connection", (socket) => {
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
         await passTurn(roomCode);
-        rooms[roomCode].timer = 60;
+        rooms[roomCode].timer = 30;
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
       }
     } catch (error) {
@@ -365,7 +366,7 @@ io.on("connection", (socket) => {
 
       if (rooms[roomCode].players[username].turn) {
         await passTurn(roomCode);
-        rooms[roomCode].timer = 60;
+        rooms[roomCode].timer = 30;
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
       }
     } catch (error) {
@@ -381,7 +382,7 @@ io.on("connection", (socket) => {
       if (rooms[roomCode].players[username].turn) {
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
         await passTurn(roomCode);
-        rooms[roomCode].timer = 60;
+        rooms[roomCode].timer = 30;
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, normalCardPlayed: false});
       }
     } catch (error) {
@@ -398,7 +399,7 @@ io.on("connection", (socket) => {
 
         // Move to the next player's turn
         passTurn(roomCode);
-        rooms[roomCode].timer = 60;
+        rooms[roomCode].timer = 30;
         refillMarket(roomCode);
         
         if (need) {
@@ -437,6 +438,18 @@ io.on("connection", (socket) => {
       console.log(error);
     }
   })
+  socket.on("resetWaitTimer", (data) => {
+    try {
+      const { roomCode } = data
+      // console.log('tick',);
+      if (rooms[roomCode]) {
+        resetWaitTimer(roomCode);
+      }
+      
+    } catch (error) {
+      console.log(error);
+    }
+  })
   socket.on("endGame", async (data) => {
     try {
       const { roomCode, username, winStatus, amount, wager } = data;
@@ -457,6 +470,7 @@ io.on("connection", (socket) => {
           // console.log(players);
         delete users[socket.id]
       } else if (winStatus === "loss") {
+        // await decreaseBalance(roomCode, username, amount);
         await axios.post(`${process.env.API_URL}/addLoss`, { party1: username, party2: roomCode, amount: amount, });
         // await decreaseBalance(roomCode, username, amount);
         delete rooms[roomCode];
@@ -494,9 +508,9 @@ const InitializeRoom = (roomCode, username, lobbyName) => {
         status: "waiting",
       },
     },
-    timer: 60,
+    timer: 30,
     ticktok: 0,
-    waitTimer: 300,
+    waitTimer: 180,
     waitTick: 0,
     market: [],
     playedCards: [],
@@ -514,7 +528,7 @@ const timerTick = async (roomCode, need) => {
         io.in(roomCode).emit("timerTicked", { timer: rooms[roomCode].timer });
         rooms[roomCode].ticktok = 1;
       } else {
-        rooms[roomCode].timer = 60;
+        rooms[roomCode].timer = 30;
         await passTurn(roomCode);
         if (need) {
           // console.log(need);
@@ -542,7 +556,7 @@ const waitTimer = async (roomCode) => {
         io.in(roomCode).emit("waitTimerTicked", { timer: rooms[roomCode].waitTimer });
         rooms[roomCode].waitTick = 1;
       } else {
-        rooms[roomCode].waitTimer = 300;
+        rooms[roomCode].waitTimer = 180;
         // refillMarket(roomCode);
         // io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
       }
@@ -553,6 +567,10 @@ const waitTimer = async (roomCode) => {
     console.log(error);
   }
   
+}
+
+const resetWaitTimer = (roomCode) => {
+  rooms[roomCode].waitTimer = 180;
 }
 
 
@@ -738,7 +756,7 @@ const increaseBalance = async (roomCode, username, amount, wager) => {
   const user = await User.findOne({ username });
   // console.log(user)
   // console.log('params', roomCode, username, amount, wager);
-  balUpdate = (amount + wager);
+  balUpdate = (amount);
   user.balance += balUpdate;
   try {
     await user.save();
@@ -762,12 +780,12 @@ const decreaseBalance = async (roomCode, username, amount) => {
   user.balance -= amount;
   try {
     await user.save();
-    await axios.post(`${process.env.API_URL}/addTransaction`, {
-      sender: "game loss",
-      amount: `-${amount}`,
-      receiver: username,
-      tno: Math.floor(Math.random() * 1000000000)
-    })
+    // await axios.post(`${process.env.API_URL}/addTransaction`, {
+    //   sender: "game loss",
+    //   amount: `-${amount}`,
+    //   receiver: username,
+    //   tno: Math.floor(Math.random() * 1000000000)
+    // })
   } catch (error) {
     console.error(error);
   }
