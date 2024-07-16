@@ -430,8 +430,9 @@ io.on("connection", (socket) => {
     try {
       const { roomCode, username } = data
       // console.log(username);
-      // console.log('tick',);
+      
       if (rooms[roomCode]) {
+        
         waitTimer(roomCode, username);
       }
       
@@ -555,6 +556,7 @@ const waitTimer = async (roomCode, username) => {
       if (rooms[roomCode].waitTimer > 0) {
         rooms[roomCode].waitTimer--;
         io.in(roomCode).emit("waitTimerTicked", { timer: rooms[roomCode].waitTimer });
+        console.log('tick');
         rooms[roomCode].waitTick = 1;
       } else {
         console.log('phase1');
