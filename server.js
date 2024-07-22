@@ -211,7 +211,7 @@ io.on("connection", (socket) => {
 
   socket.on("updatePlayedCards", (data) => {
     try {
-      const { roomCode, userID, username } = data;
+      const { roomCode, userID, username, need } = data;
       playedCards = rooms[roomCode].playedCards;
       // console.log('userID', userID);
       users[socket.id] = {
@@ -220,7 +220,7 @@ io.on("connection", (socket) => {
       }
       delete users[userID];
       // console.log(users);
-      io.in(roomCode).emit("playersRejoined", { playedCards, normalCardPlayed: true, players: rooms[roomCode].players, market: rooms[roomCode].market, need: rooms[roomCode].cardNeeded, userID: socket.id, username: username });
+      io.in(roomCode).emit("playersRejoined", { playedCards, normalCardPlayed: true, players: rooms[roomCode].players, market: rooms[roomCode].market, need: need, userID: socket.id, username: username });
     } catch (error) {
       console.log(error);
     }
@@ -276,7 +276,7 @@ io.on("connection", (socket) => {
         // Emit the startGame event to the room with the updated player data
         // console.log('playerrr' ,rooms[roomCode].players);
         if (rooms[roomCode].started === false) {
-          await axios.post(`${process.env.API_URL}/addGame`, { party1: rooms[roomCode].players[playerKeys[0]].username, party2: rooms[roomCode].players[playerKeys[1]].username, amount: rooms[roomCode].players[playerKeys[0]].wager });
+          await axios.post(`${process.env.API_URL}/addGame`, { party1: rooms[roomCode].players[playerKeys[0]].username, party2: rooms[roomCode].players[playerKeys[1]].username, amount: rooms[roomCode].players[playerKeys[0]].wager, roomCode: roomCode });
           rooms[roomCode].started = true;
         }
         
@@ -302,7 +302,7 @@ io.on("connection", (socket) => {
       
       // console.log(players);
       socket.join(roomCode);
-      // console.log(`User with ID: ${socket.id} and name ${username} rejoined room: ${roomCode}`);
+      console.log(`User with ID: ${socket.id} and name ${username} rejoined room: ${roomCode}`);
       // console.log('market', rooms[roomCode].market);
       
       io.to(socket.id).emit("reconnected", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards, room: roomCode });
@@ -394,9 +394,9 @@ io.on("connection", (socket) => {
     try {
       const { roomCode, username, need } = data;
 
-      if (rooms[roomCode].players[username].turn) {
+      // if (rooms[roomCode].players[username].turn) {
         rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
-
+        console.log('used');
         // Move to the next player's turn
         passTurn(roomCode);
         rooms[roomCode].timer = 30;
@@ -409,17 +409,17 @@ io.on("connection", (socket) => {
         }
 
         io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
-      }
+      // }
     } catch (error) {
       console.log(error);
     }
   });
   socket.on("updateTimer", (data) => {
     try {
-      const { roomCode, need } = data
+      const { roomCode, need, id, turn, username } = data
       // console.log('tick',);
       if (rooms[roomCode]) {
-        timerTick(roomCode, need);
+        timerTick(roomCode, need, id, turn, username);
       }
       
     } catch (error) {
@@ -491,7 +491,7 @@ io.on("connection", (socket) => {
     // Logic to handle player disconnection 
     
     if (users[socket.id]) {
-      // console.log('users', users[socket.id]);
+      console.log('users', users[socket.id]);
       io.to(users[socket.id].roomCode).emit("waitingOnUser", { usersname: users[socket.id].username, userID: socket.id });
     }
     
@@ -520,7 +520,7 @@ const InitializeRoom = (roomCode, username, lobbyName) => {
     started: false,
   };
 }
-const timerTick = async (roomCode, need) => {
+const timerTick = async (roomCode, need, id, turn, username) => {
   // console.log('need',need);
   try {
     if (rooms[roomCode].ticktok === 0) {
@@ -529,15 +529,39 @@ const timerTick = async (roomCode, need) => {
         io.in(roomCode).emit("timerTicked", { timer: rooms[roomCode].timer });
         rooms[roomCode].ticktok = 1;
       } else {
-        rooms[roomCode].timer = 30;
-        await passTurn(roomCode);
-        if (need) {
-          // console.log(need);
-          io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
-          
-        } else {
-          io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+        // rooms[roomCode].timer = 30;
+        if (turn == 'true') {
+          // io.to(id).emit("isItYourTurn");
+          try {
+      
+            // if (rooms[roomCode].players[username].turn) {
+              rooms[roomCode].players[username].cards.push(rooms[roomCode].market.shift());
+              console.log('used');
+              // Move to the next player's turn
+              passTurn(roomCode);
+              rooms[roomCode].timer = 30;
+              refillMarket(roomCode);
+              
+              if (need) {
+                // console.log(need);
+                io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
+                return;
+              }
+      
+              io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+            // }
+          } catch (error) {
+            console.log(error);
+          }
         }
+        // await passTurn(roomCode);
+        // if (need) {
+        //   // console.log(need);
+        //   io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, playedCards: rooms[roomCode].playedCards, market: rooms[roomCode].market, normalCardPlayed: false, need: need, cardNeeded: true});
+          
+        // } else {
+        //   io.in(roomCode).emit("playersUpdated", { players: rooms[roomCode].players, market: rooms[roomCode].market, playedCards: rooms[roomCode].playedCards });
+        // }
 
       }
     } else {
@@ -764,7 +788,7 @@ app.post("/addTransaction", async (req, res) => {
 })
 
 const increaseBalance = async (roomCode, username, amount, wager) => {
-  // console.log('increasing amount')
+  console.log(`increasing amount of ${username} by ${amount}`);
   const user = await User.findOne({ username });
   // console.log(user)
   // console.log('params', roomCode, username, amount, wager);
@@ -818,6 +842,7 @@ const placeBet = async (roomCode, username, amount) => {
       receiver: "system",
       status: "successful",
     })
+    console.log(`bet of N${amount} by ${username} placed successfully on room ${roomCode}`);
     return 'Bet placed successfully'
   } catch (error) {
     console.error(error);
@@ -868,10 +893,10 @@ app.post("/updateTransaction", async (req, res) => {
 })
 
 app.post("/addGame", async (req, res) => {
-  const { party1, party2, amount } = req.body;
+  const { party1, party2, amount, roomCode } = req.body;
   const transaction = new Transaction({
-    party1,
-    party2,
+    party1: party1 + " VS " + party2,
+    party2: roomCode,
     amount,
     detail: "game",
     status: "started",
@@ -882,6 +907,38 @@ app.post("/addGame", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(201).json({ message: "Error adding transaction" });
+  }
+})
+
+app.post("/forceEndGame", async (req, res) => {
+  const { transactionId } = req.body;
+  const transaction = await Transaction.findById(transactionId);
+  await increaseBalance(transaction.party2, transaction.party1.split(" VS ")[0], transaction.amount, 0);
+  await increaseBalance(transaction.party2, transaction.party1.split(" VS ")[1], transaction.amount, 0);
+  const roomCode = transaction.party2;
+  transaction.status = "Force Ended";
+  try {
+    await transaction.save();
+
+    delete rooms[roomCode];
+    
+    // console.log(players);
+    // delete the other username in players with the same roomCode
+    Object.keys(players).forEach((key) => {
+      if (players[key] === roomCode) {
+        delete players[key];
+      }
+    })
+    Object.keys(users).forEach((key) => {
+      if (users[key].roomCode === roomCode) {
+        delete users[key];
+      }
+    })
+    res.status(200).json({ message: "Transaction approved successfully", success: true });
+    
+  } catch (error) {
+    console.error(error);
+    res.status(201).json({ message: "Error approving transaction" });
   }
 })
 
@@ -935,6 +992,9 @@ app.post("/addWin", async (req, res) => {
   })
   try {
     await transaction.save();
+    const tsx = await Transaction.findOne({ party2 });
+    tsx.status = "Ended";
+    await tsx.save();
     res.status(200).json({ message: "Transaction added successfully", success: true });
   } catch (error) {
     console.error(error);
