@@ -1108,10 +1108,19 @@ app.get("/getWithdraw/:username", async (req, res) => {
 
 app.get("/getGame/:username", async (req, res) => {
   // const unsortedtransactions = await Transaction.find({ detail: "game", party2: req.params.username });
-  const unsortedtransactions = await Transaction.find({$or:[{ detail: "game", party2: req.params.username },{ detail: "game", party1: req.params.username }]});
-  const transactions = unsortedtransactions.sort((a, b) => b.date - a.date);
+  const unsortedtransactions = await Transaction.find({$or:[{ detail: "game" }]});
+  let transactions = {};
+  // console.log(unsortedtransactions);
+  for (let i = 0; i < unsortedtransactions.length; i++) {
+    // console.log(unsortedtransactions[i].party1.split(' VS ')[0]);
+    if (unsortedtransactions[i].party1.split(' VS ')[0] === req.params.username || unsortedtransactions[i].party1.split(' VS ')[1] === req.params.username) {
+      transactions[i] = unsortedtransactions[i];
+      // console.log(transactions);
+    }
+  }
+  const sortedTransactions = Object.values(transactions).sort((a, b) => b.date - a.date);
   try {
-    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions });
+    res.status(200).json({ message: "Transactions fetched successfully", success: true, transactions: sortedTransactions });
   } catch (error) {
     console.error(error);
     res.status(201).json({ message: "Error fetching transactions" });
